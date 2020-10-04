@@ -1,0 +1,7 @@
+%{
+  "bencode": {:hex, :bencode, "0.3.2", "1dece23710b54ef984852aa6abffac982e033eaaee8d57b6a6894ee8ddbd0c84", [:mix], [{:eqc_ex, "~> 1.2.4", [hex: :eqc_ex, repo: "hexpm", optional: false]}], "hexpm", "6abf5adace62d6e105b17d50faa8bdce84dea18c947ecb0bb81b6b2a3582dae7"},
+  "bento": {:hex, :bento, "0.9.2", "7c12c68a34c5e63ff9e71506dcedcd2f983055ac1c40edcd86750ead09e2a174", [:mix], [{:poison, "~> 2.0", [hex: :poison, repo: "hexpm", optional: false]}], "hexpm", "8be4312c4eacf57ef0c319f5ddd0b31872b510dc8ca02c64206ee648ec0f91d1"},
+  "eqc_ex": {:hex, :eqc_ex, "1.2.4", "c169c4025e6f59d95977b1d5f3846cd964e996449755d7e9bf6ac6d3a4520839", [:mix], [], "hexpm", "2d2895bedf784ffaf11144d25e6ca11a4cfff5b73c35ec6bedd3c5ec5cabc5e9"},
+  "magnet": {:hex, :magnet, "0.0.1", "f61b64324da45b1e36a8f9815eba39e23662fc8c29f40c77bee4f6de9bf92d09", [:mix], [], "hexpm", "064af72e9422262813977752e2f7439501894bce48e5679576ceb93f6b649581"},
+  "poison": {:hex, :poison, "2.2.0", "4763b69a8a77bd77d26f477d196428b741261a761257ff1cf92753a0d4d24a63", [:mix], [], "hexpm", "519bc209e4433961284174c497c8524c001e285b79bdf80212b47a1f898084cc"},
+}
