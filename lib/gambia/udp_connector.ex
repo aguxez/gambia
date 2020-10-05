@@ -3,6 +3,10 @@ defmodule Gambia.UdpConnector do
 
   use GenServer
 
+  require Logger
+
+  alias Gambia.Utils
+
   @port 8080
 
   def start_link(_args) do
@@ -11,6 +15,8 @@ defmodule Gambia.UdpConnector do
 
   @impl true
   def init(state) do
+    :timer.send_interval(10_000, self(), :check_tracker_connection)
+
     {:ok, state, {:continue, :trackers_fetching}}
   end
 
@@ -22,6 +28,29 @@ defmodule Gambia.UdpConnector do
     Process.send(self(), :init_connect, [:nosuspend])
 
     {:noreply, %{trackers: magnet.announce, socket: socket, magnet: magnet}}
+  end
+
+  @impl true
+  def handle_info(:check_tracker_connection, state) do
+    # sometimes we do not receive any response from a tracker, what we do on this check is
+    # check for a populated state, in case there's nothing we will close the socket
+    # so we don't receive messages from the old socket (in case of delays) and start a new connection
+    # for the saved trackers
+    new_state =
+      if Map.has_key?(state, :announced_resp) do
+        # Having this key on state means we already picked a tracker to work with
+        state
+      else
+        Logger.info("Trying to reconnect to another peer...")
+        :gen_udp.close(state.socket)
+
+        {:ok, socket} = :gen_udp.open(@port)
+
+        Process.send(self(), :init_connect, [:nosuspend])
+        %{state | socket: socket}
+      end
+
+    {:noreply, new_state}
   end
 
   @impl true
@@ -59,7 +88,7 @@ defmodule Gambia.UdpConnector do
         <<1::32>> <>
         :crypto.strong_rand_bytes(4) <>
         state.magnet.info_hash <>
-        get_peer_id() <>
+        Utils.get_peer_id() <>
         <<0::64>> <>
         <<8_978_640_732::64>> <>
         <<0::64>> <>
@@ -80,9 +109,11 @@ defmodule Gambia.UdpConnector do
 
     new_state =
       if length(parsed_resp.peers) >= 2 do
-        Process.send(:tcp_connector, {:try_connect_to_peer, parsed_resp}, [:nosuspend])
+        new_state = Map.put(state, :announced_resp, parsed_resp)
 
-        Map.put(state, :announced_resp, parsed_resp)
+        Process.send(:tcp_connector, {:try_connect_to_peer, new_state}, [:nosuspend])
+
+        new_state
       else
         Process.send(self(), :init_connect, [:nosuspend])
 
@@ -94,7 +125,7 @@ defmodule Gambia.UdpConnector do
 
   @impl true
   def handle_info(msg, state) do
-    IO.inspect(msg, label: "Unhandled msg")
+    Logger.info("Unhandled message on UDP connector - #{inspect(msg)}")
 
     {:noreply, state}
   end
@@ -106,16 +137,7 @@ defmodule Gambia.UdpConnector do
       |> Magnet.decode()
       |> Enum.into(%Magnet{})
 
-    %{magnet | info_hash: parse_info_hash(magnet)}
-  end
-
-  defp parse_info_hash(%Magnet{} = magnet) do
-    magnet.info_hash
-    |> hd()
-    |> String.split(":")
-    |> Enum.at(-1)
-    |> String.upcase()
-    |> Base.decode16!()
+    %{magnet | info_hash: Utils.info_hash_from_magnet(magnet)}
   end
 
   defp try_trackers([], _socket) do
@@ -123,6 +145,8 @@ defmodule Gambia.UdpConnector do
   end
 
   defp try_trackers([tracker | rest], socket) do
+    Logger.info("Trying to connect to #{tracker}")
+
     parsed_host = URI.parse(tracker)
 
     {:ok, host_ip} =
@@ -135,10 +159,6 @@ defmodule Gambia.UdpConnector do
     :gen_udp.send(socket, host_ip, parsed_host.port, message)
 
     {parsed_host, rest, host_ip}
-  end
-
-  defp get_peer_id do
-    String.pad_leading("-MD0001" <> :crypto.strong_rand_bytes(20), 13, "0")
   end
 
   defp parse_announce_resp(message) do
