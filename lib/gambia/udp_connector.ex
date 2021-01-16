@@ -41,7 +41,7 @@ defmodule Gambia.UdpConnector do
         # Having this key on state means we already picked a tracker to work with
         state
       else
-        Logger.info("Trying to reconnect to another peer...")
+        Logger.info("Trying to reconnect to another tracker...")
         :gen_udp.close(state.socket)
 
         {:ok, socket} = :gen_udp.open(@port)
