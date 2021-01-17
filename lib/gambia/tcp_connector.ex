@@ -6,15 +6,10 @@ defmodule Gambia.TCPConnetor do
   require Logger
 
   alias Gambia.Message
+  alias Gambia.Schema.Peer
 
   # Only waits this amount of time trying a connection to a peer
   @connect_timeout 500
-
-  ##
-  # last_message_state: tracks the message we're receiving from a peer, this is in case we receive incomplete messages and need to process further
-  # conn_state: dictates the current state of a connection with a peer, this way we know how to act
-  # pieces: tells which parts of a file a peer has so we can request from them
-  @initial_peer_state %{last_message_state: nil, conn_state: :choked, pieces: nil}
 
   def start_link(_args) do
     state = %{connected_peers: %{}, info_hash: nil}
@@ -99,25 +94,25 @@ defmodule Gambia.TCPConnetor do
   defp tcp_handle_message(<<0::24, 1, 0>>, socket, state) do
     Logger.info("Received choke from #{inspect(socket)}")
 
-    put_in_peer_state(state, socket, &conn_state_peer_update(&1, socket, :choked))
+    put_in_peer_state(state, socket, &conn_state_peer_update(&1, socket, "choked"))
   end
 
   defp tcp_handle_message(<<0::24, 1, 1>>, socket, state) do
     Logger.info("Received unchoke from #{inspect(socket)}")
 
-    put_in_peer_state(state, socket, &conn_state_peer_update(&1, socket, :unchoked))
+    put_in_peer_state(state, socket, &conn_state_peer_update(&1, socket, "unchoked"))
   end
 
   defp tcp_handle_message(<<0::24, 1, 2>>, socket, state) do
     Logger.info("Received interested from #{inspect(socket)}")
 
-    put_in_peer_state(state, socket, &conn_state_peer_update(&1, socket, :interested))
+    put_in_peer_state(state, socket, &conn_state_peer_update(&1, socket, "interested"))
   end
 
   defp tcp_handle_message(<<0::24, 1, 3>>, socket, state) do
     Logger.info("Received uninterested from #{inspect(socket)}")
 
-    put_in_peer_state(state, socket, &conn_state_peer_update(&1, socket, :uninterested))
+    put_in_peer_state(state, socket, &conn_state_peer_update(&1, socket, "uninterested"))
   end
 
   defp tcp_handle_message(<<_::32, _::8, _::binary>> = message, socket, state) do
@@ -138,6 +133,7 @@ defmodule Gambia.TCPConnetor do
     state
   end
 
+  # TODO: Improve these two functions, we're unnecesarily accessing and updating the state
   defp put_in_peer_state(state, socket, function) do
     # Check if socket is on state and update state with function
     if get_in(state, [:connected_peers, socket]) do
@@ -147,8 +143,17 @@ defmodule Gambia.TCPConnetor do
     end
   end
 
-  defp conn_state_peer_update(state, socket, status),
-    do: put_in(state, [:connected_peers, socket, :conn_state], status)
+  defp conn_state_peer_update(state, socket, status) do
+    case get_in(state, [:connected_peers, socket]) do
+      nil ->
+        nil
+
+      peer ->
+        changeset = Peer.changeset(peer, %{conn_state: status})
+
+        put_in(state, [:connected_peers, socket], struct(Peer, changeset.changes))
+    end
+  end
 
   defp connect_to_peers(udp_state) do
     # connected_peers = Task.async_stream(udp_state.announced_resp.peers, &try_peer(&1, udp_state))
@@ -165,8 +170,7 @@ defmodule Gambia.TCPConnetor do
          :ok <- :gen_tcp.send(socket, Message.handshake(udp_state.magnet.info_hash)) do
       Logger.info("Sent handshake message to #{inspect(peer.ip)}")
 
-      # Since we are the client, all connections start as choked
-      {socket, @initial_peer_state}
+      {socket, struct(Peer)}
     else
       {:error, :timeout} ->
         Logger.warn("Tried to connect to #{inspect(peer.ip)} but it timed-out")

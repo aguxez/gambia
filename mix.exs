@@ -23,7 +23,8 @@ defmodule Gambia.MixProject do
   defp deps do
     [
       {:bento, "~> 0.9"},
-      {:magnet, "~> 0.0.1"}
+      {:magnet, "~> 0.0.1"},
+      {:ecto_sql, "~> 3.0"}
     ]
   end
 end
