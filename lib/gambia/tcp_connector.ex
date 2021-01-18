@@ -94,7 +94,12 @@ defmodule Gambia.TCPConnetor do
   defp tcp_handle_message(<<0::24, 1, 0>>, socket, state) do
     Logger.info("Received choke from #{inspect(socket)}")
 
-    put_in_peer_state(state, socket, &conn_state_peer_update(&1, socket, "choked"))
+    # Close the connection and remove from state
+    :gen_tcp.close(socket)
+
+    connected_peers = Map.delete(state.connected_peers, socket)
+
+    %{state | connected_peers: connected_peers}
   end
 
   defp tcp_handle_message(<<0::24, 1, 1>>, socket, state) do
@@ -117,13 +122,13 @@ defmodule Gambia.TCPConnetor do
 
   defp tcp_handle_message(<<_::32, _::8, _::binary>> = message, socket, state) do
     case Message.Handler.handle(message, socket, state) do
-      {state, <<0>>} ->
-        state
+      {new_state, <<0>>} ->
+        new_state
 
-      {state, response} ->
+      {new_state, response} ->
         :gen_tcp.send(socket, response)
 
-        state
+        new_state
     end
   end
 
@@ -151,12 +156,13 @@ defmodule Gambia.TCPConnetor do
       peer ->
         changeset = Peer.changeset(peer, %{conn_state: status})
 
-        put_in(state, [:connected_peers, socket], struct(Peer, changeset.changes))
+        update_in(state, [:connected_peers, socket], &Map.merge(&1, changeset.changes))
     end
   end
 
   defp connect_to_peers(udp_state) do
-    # connected_peers = Task.async_stream(udp_state.announced_resp.peers, &try_peer(&1, udp_state))
+    # |> Task.async_stream(&try_peer(&1, udp_state), max_concurrency: 1)
+    # |> Enum.into([], fn {:ok, res} -> res end)
     udp_state.announced_resp.peers
     |> Enum.map(&try_peer(&1, udp_state))
     |> Enum.reject(&is_nil/1)
